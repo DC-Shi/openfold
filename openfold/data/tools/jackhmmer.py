@@ -13,6 +13,14 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+# You need "mkdir /tmp/ramdisk" first if you want to use URL
+
+# from /opt/conda/lib/python3.7/site-packages/openfold-1.0.0-py3.7-linux-x86_64.egg/openfold/data/tools/jackhmmer.py
+# Example use:
+# pushd /opt/conda/lib/python3.7/site-packages/openfold-1.0.0-py3.7-linux-x86_64.egg/openfold/data/tools/
+# mv jackhmmer.py jackhmmer.py.bak
+# cp /data/modified_openfold/jackhmmer.py ./
+
 """Library to run Jackhmmer from Python."""
 
 from concurrent import futures
@@ -180,7 +188,7 @@ class Jackhmmer:
 
         return raw_output
 
-    def query(self, input_fasta_path: str) -> Sequence[Mapping[str, Any]]:
+    def queryWithDownload(self, input_fasta_path: str) -> Sequence[Mapping[str, Any]]:
         """Queries the database using Jackhmmer."""
         if self.num_streamed_chunks is None:
             return [self._query_chunk(input_fasta_path, self.database_path)]
@@ -226,3 +234,57 @@ class Jackhmmer:
                 if self.streaming_callback:
                     self.streaming_callback(i)
         return chunked_output
+
+    
+    def wrapperForQuery(self, packed: (str, str)) -> Mapping[str, Any]:
+        # Unpack the array
+        input_fasta_path, database_path = packed
+        return self._query_chunk(input_fasta_path, database_path)
+
+    def queryLocal(self, input_fasta_path: str) -> Sequence[Mapping[str, Any]]:
+        """Queries the local database using Jackhmmer."""
+        if self.num_streamed_chunks is None:
+            return [self._query_chunk(input_fasta_path, self.database_path)]
+
+        db_basename = os.path.basename(self.database_path)
+        filePrefix = self.database_path[7:] # Ignore 'file://' prefix
+        db_local_chunk = lambda db_idx: f"{filePrefix}.{db_idx}"
+
+        chunked_output = []
+        print("Using local file for msa search")
+
+        from multiprocessing import Pool
+        # Query multiple trunks at the same time
+        # Take about two minutes for 16 processes
+        with Pool(processes=32) as pool:         # start 4 worker processes
+            threadsIter = pool.imap(self.wrapperForQuery,
+                    [(input_fasta_path, db_local_chunk(i)) for i in range(1, self.num_streamed_chunks + 1)],
+                    chunksize = 1)     # Loop over each element in array
+
+            for i, result in enumerate(threadsIter):
+                chunked_output.append(result)
+                if self.streaming_callback:
+                    self.streaming_callback(i+1)
+
+
+        # for i in range(1, self.num_streamed_chunks + 1):
+        #     print(f"Searching local chunked {db_local_chunk(i)}")
+        #     # Run Jackhmmer with the chunk
+        #     chunked_output.append(
+        #         self._query_chunk(input_fasta_path, db_local_chunk(i))
+        #     )
+
+        return chunked_output
+
+    def query(self, input_fasta_path: str) -> Sequence[Mapping[str, Any]]:
+        """Queries the database using Jackhmmer."""
+        if self.num_streamed_chunks is None:
+            return [self._query_chunk(input_fasta_path, self.database_path)]
+
+        # If it is file location, use locally method
+        if self.database_path.startswith("file://"):
+            return self.queryLocal(input_fasta_path)
+        
+        # Otherwise use original method.
+        # You can also use file:// URI here, but it will copy the data to /tmp and query in single thread.
+        return self.queryWithDownload(input_fasta_path)
