@@ -108,6 +108,8 @@ there's no need to download these alignment databases. Simply make sure that
 the `alignment_dir` contains one directory per chain and that each of these
 contains alignments (.sto, .a3m, and .hhr) corresponding to that chain. You
 can use `scripts/flatten_roda.sh` to reformat RODA downloads in this way.
+You can also use `scripts/flatten_roda_hardlink.sh` to reformat RODA with 
+hardlinks if you want to keep the original data structure.
 Note that the RODA alignments are NOT compatible with the recent .cif ground
 truth files downloaded by `scripts/download_alphafold_dbs.sh`. To fetch .cif 
 files that match the RODA MSAs, once the alignments are flattened, use 
