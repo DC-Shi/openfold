@@ -22,6 +22,10 @@ COPY environment.yml /opt/openfold/environment.yml
 
 # installing into the base environment since the docker container wont do anything other than run openfold
 RUN conda env update -n base --file /opt/openfold/environment.yml && conda clean --all
+# Install other dependencies for using jupyter notebook
+RUN pip install py3Dmol matplotlib jupyterlab ipywidgets
+# Install editor for in-container editor
+RUN apt-get update && DEBIAN_FRONTEND=noninteractive apt-get install -y vim
 
 COPY openfold /opt/openfold/openfold
 COPY scripts /opt/openfold/scripts
